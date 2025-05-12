@@ -14,11 +14,12 @@ from app.schemas.user import User as UserSchema, UserCreate
 
 router = APIRouter()
 
+
 @router.post("/register", response_model=UserSchema, summary="注册新用户", description="创建一个新的用户账号")
 def register(
-    *,
-    db: Session = Depends(get_db),
-    user_in: UserCreate,
+        *,
+        db: Session = Depends(get_db),
+        user_in: UserCreate,
 ) -> Any:
     """
     注册新用户。
@@ -30,7 +31,7 @@ def register(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="用户名已被注册",
         )
-    
+
     # 创建新用户
     user = User(
         username=user_in.username,
@@ -41,10 +42,11 @@ def register(
     db.refresh(user)
     return user
 
+
 @router.post("/login", summary="用户登录", description="使用用户名和密码登录系统，获取访问令牌")
 def login(
-    db: Session = Depends(get_db),
-    form_data: OAuth2PasswordRequestForm = Depends(),
+        db: Session = Depends(get_db),
+        form_data: OAuth2PasswordRequestForm = Depends(),
 ) -> Any:
     """
     OAuth2兼容的令牌登录，获取用于后续请求的访问令牌。
@@ -56,13 +58,13 @@ def login(
             detail="用户名或密码不正确",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     # 创建访问令牌
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         subject=user.id, expires_delta=access_token_expires
     )
-    
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
