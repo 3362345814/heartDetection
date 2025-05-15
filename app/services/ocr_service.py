@@ -12,6 +12,8 @@ from urllib.parse import quote
 
 import requests
 
+from app.core.config import settings
+
 
 class XunfeiOCR:
     def recognize_from_base64(self, image_base64: str, max_retries=3) -> Dict:
@@ -317,9 +319,9 @@ class UltrasoundReport:
         self.image_map = image_map
         self.data = {}
         self.ocr = XunfeiOCR(
-            app_id="7d5de13f",
-            api_key="ed82f06d6a280479c849a8043dc7d0a0",
-            api_secret="MTg2NjhiM2ZlZDY0ZTUxZjVhYmM1ZGIz"
+            app_id=settings.OCR_APP_ID,
+            api_key=settings.OCR_API_KEY,
+            api_secret=settings.OCR_API_SECRET
         )
 
     def process_images(self):

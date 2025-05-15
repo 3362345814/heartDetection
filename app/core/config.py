@@ -49,5 +49,9 @@ class Settings(BaseSettings):
     COS_BUCKET_NAME: str = os.getenv('COS_BUCKET_NAME')
     COS_REGION: str = os.getenv('COS_REGION')
 
+    OCR_APP_ID: str = os.getenv('OCR_APP_ID')
+    OCR_API_KEY: str = os.getenv('OCR_API_KEY')
+    OCR_API_SECRET: str = os.getenv('OCR_API_SECRET')
+
 
 settings = Settings()
