@@ -43,7 +43,7 @@ class UltrasoundImage(Base):
     case_id = Column(Integer, ForeignKey("case.id", ondelete="CASCADE"), nullable=False, comment="外键，关联 case.id")
     image_type = Column(Integer, nullable=False,
                         comment="图片类型：0=二维-心尖，1=二维-长轴，2=多普勒-心尖，3=多普勒-长轴，4=二维心房尺寸图，"
-                                "5=左心室M型超声图，6=右心室M型超声图，7=左心室组织多普勒图，8=右心室组织多普勒图，7=频谱图")
+                                "5=左心室M型超声图，6=右心室M型超声图，7=左心室组织多普勒图，8=右心室组织多普勒图，9=频谱图")
     file_path = Column(String(500), nullable=False, comment="存储路径（本地或云地址）")
     upload_time = Column(DateTime, default=datetime.utcnow, comment="上传时间，自动填写")
 

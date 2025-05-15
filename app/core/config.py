@@ -1,7 +1,11 @@
+import os
 from typing import List, Union
 
+from dotenv import load_dotenv
 from pydantic import validator
 from pydantic_settings import BaseSettings
+
+load_dotenv()
 
 
 class Settings(BaseSettings):
@@ -38,6 +42,12 @@ class Settings(BaseSettings):
 
     class Config:
         case_sensitive = True
+        env_file = "../../.env"
+
+    COS_SECRET_ID: str = os.getenv('COS_SECRET_ID')
+    COS_SECRET_KEY: str = os.getenv('COS_SECRET_KEY')
+    COS_BUCKET_NAME: str = os.getenv('COS_BUCKET_NAME')
+    COS_REGION: str = os.getenv('COS_REGION')
 
 
 settings = Settings()

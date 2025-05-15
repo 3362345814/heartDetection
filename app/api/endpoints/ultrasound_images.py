@@ -1,5 +1,4 @@
 import os
-import shutil
 from typing import Any, List
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -9,6 +8,7 @@ from app.api.deps import get_current_user, get_db
 from app.core.config import settings
 from app.models.models import Case, UltrasoundImage, User
 from app.schemas.ultrasound_image import UltrasoundImage as UltrasoundImageSchema
+from app.utils.cos import upload_file_to_cos, delete_file_from_cos
 
 router = APIRouter()
 
@@ -53,13 +53,11 @@ async def upload_ultrasound_image(
         db.add(ultrasound_image)
         db.flush()  # Generate ID without committing
 
-    new_filename = f"ultra_{ultrasound_image.image_type}.jpg"
-    new_file_path = os.path.join(upload_dir, new_filename)
+    # 上传文件到腾讯云 COS
+    uploaded_url = upload_file_to_cos(file.file, file.filename, file.content_type or "image/jpeg", upload_dir)
 
-    with open(new_file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    ultrasound_image.file_path = new_file_path
+    # 保存 URL 到数据库
+    ultrasound_image.file_path = uploaded_url
     db.commit()
     db.refresh(ultrasound_image)
 
@@ -149,9 +147,7 @@ def delete_ultrasound_image(
             detail="Not enough permissions",
         )
 
-    # Delete the file
-    if os.path.exists(ultrasound_image.file_path):
-        os.remove(ultrasound_image.file_path)
+    delete_file_from_cos(ultrasound_image.file_path)
 
     # Delete the record
     db.delete(ultrasound_image)

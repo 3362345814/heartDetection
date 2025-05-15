@@ -1,7 +1,9 @@
 # %%
 import os
 from datetime import datetime
+from io import BytesIO
 
+import requests
 import torch
 import torch.nn as nn
 from PIL import Image
@@ -10,6 +12,8 @@ from torch.nn import functional as F
 from torchvision import models, transforms
 
 from app.models.models import Case, DetectionResult, UltrasoundImage
+from app.services.ocr_service import UltrasoundReport
+from app.utils.cos import upload_file_to_cos
 
 
 class ModelService:
@@ -42,11 +46,10 @@ class ModelService:
 
         conclusion, confidence = cls._predict_case(images)
 
-        description = ""
         if conclusion == "mild":
-            description += "二尖瓣反流（轻度）"
+            conclusion = "二尖瓣反流（轻度）"
         elif conclusion == "moderate":
-            description += "二尖瓣反流（中度）"
+            conclusion = "二尖瓣反流（中度）"
 
         detection_result = db.query(DetectionResult).filter_by(case_id=case_id).first()
         if detection_result:
@@ -66,7 +69,13 @@ class ModelService:
         db.commit()
         db.refresh(detection_result)
 
-        cls.segment_and_save_masks(db, case_id, detection_result.id, description)
+        cls.segment_and_save_masks(db, case_id, detection_result.id, conclusion)
+
+        image_map = {img.image_type: img.file_path for img in images if img.image_type in [5, 6, 7, 8, 9, 10]}
+        if image_map:
+            report_text = UltrasoundReport.report(image_map)
+            detection_result.description = report_text
+            db.commit()
 
         return detection_result
 
@@ -108,8 +117,8 @@ class ModelService:
                 continue
 
             model_path = model_files[image_type]
-            if not os.path.exists(image.file_path) or not os.path.exists(model_path):
-                print(f"警告：图像文件或模型文件不存在: {image.file_path}, {model_path}")
+            if not os.path.exists(model_path):
+                print(f"警告：模型文件不存在: {model_path}")
                 continue
 
             model = models.resnet50(pretrained=False)
@@ -118,7 +127,8 @@ class ModelService:
             model = model.to(cls.device)
             model.eval()
 
-            img = Image.open(image.file_path).convert('RGB')
+            img_response = requests.get(image.file_path)
+            img = Image.open(BytesIO(img_response.content)).convert('RGB')
             input_tensor = cls.transform(img).unsqueeze(0).to(cls.device)
             with torch.no_grad():
                 output = model(input_tensor)
@@ -142,7 +152,7 @@ class ModelService:
         return final_conclusion, avg_confidence
 
     @classmethod
-    def segment_and_save_masks(cls, db: Session, case_id: int, detection_result_id: int, description: str) -> None:
+    def segment_and_save_masks(cls, db: Session, case_id: int, detection_result_id: int, conclusion: str) -> None:
         from app.models.models import DetectionImage
         from matplotlib import pyplot as plt
         import numpy as np
@@ -150,7 +160,6 @@ class ModelService:
         from torchvision import transforms
         import torch
         from PIL import Image
-        import os
         from datetime import datetime
 
         def overlay_mask(image: Image.Image, mask: np.ndarray, class_names: list[str]) -> np.ndarray:
@@ -202,17 +211,13 @@ class ModelService:
                 transforms.Resize((512, 512)),
                 transforms.ToTensor()
             ])
-            image = Image.open(record.file_path).convert("RGB")
+            img_response = requests.get(record.file_path)
+            image = Image.open(BytesIO(img_response.content)).convert("RGB")
             tensor = transform(image).unsqueeze(0).to(device)
             with torch.no_grad():
                 output = model(tensor)[0]
             pred_mask = output.argmax(0).byte().cpu().numpy()
             overlay = overlay_mask(image, pred_mask, class_names)
-
-            # save path
-            base_dir = f"uploads/case_{case_id}/result_{detection_result_id}"
-            os.makedirs(base_dir, exist_ok=True)
-            save_path = os.path.join(base_dir, f"seg_{record.image_type}.png")
 
             plt.figure(figsize=(8, 8))
             plt.imshow(overlay)
@@ -221,8 +226,14 @@ class ModelService:
             plt.legend(handles, class_names)
             plt.axis("off")
             plt.tight_layout()
-            plt.savefig(save_path)
+
+            buf = BytesIO()
+            plt.savefig(buf, format='png')
             plt.close()
+            buf.seek(0)
+
+            save_path = upload_file_to_cos(buf, f"seg_{record.image_type}.png", content_type="image/png",
+                                           path_prefix=f"segmentation/case_{case_id}/result_{detection_result_id}")
 
             existing = db.query(DetectionImage).filter_by(result_id=detection_result_id,
                                                           image_type=record.image_type).first()
@@ -244,17 +255,17 @@ class ModelService:
                 if "TV" in class_names:
                     tv_index = class_names.index("TV") + 1
                     print((pred_mask == tv_index).sum(), threshold)
-                    if (pred_mask == tv_index).sum() > threshold and "三尖瓣反流" not in description:
-                        description += "，三尖瓣反流"
+                    if (pred_mask == tv_index).sum() > threshold and "三尖瓣反流" not in conclusion:
+                        conclusion += "，三尖瓣反流"
 
                 # Check for Aorta reflux
                 if "Aorta" in class_names:
                     ao_index = class_names.index("Aorta") + 1
-                    if (pred_mask == ao_index).sum() > threshold and "主动脉瓣反流" not in description:
-                        description += "，主动脉瓣反流"
+                    if (pred_mask == ao_index).sum() > threshold and "主动脉瓣反流" not in conclusion:
+                        conclusion += "，主动脉瓣反流"
         db.commit()
 
         detection_result = db.query(DetectionResult).filter_by(id=detection_result_id).first()
         if detection_result:
-            detection_result.description = description
+            detection_result.conclusion = conclusion
             db.commit()

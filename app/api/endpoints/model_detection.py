@@ -5,14 +5,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
+from app.api.endpoints.detection_results import read_detection_results_with_image
 from app.models.models import Case, User
-from app.schemas.detection_result import DetectionResult as DetectionResultSchema
 from app.services.model_service import ModelService
 
 router = APIRouter()
 
 
-@router.post("/{case_id}/detect", response_model=DetectionResultSchema, summary="执行疾病检测",
+@router.post("/{case_id}/detect", summary="执行疾病检测",
              description="对指定病例调用AI模型进行疾病检测并生成结果")
 async def detect_disease(
         *,
@@ -38,8 +38,9 @@ async def detect_disease(
 
     try:
         # 调用模型服务进行疾病检测
-        detection_result = await ModelService.detect_disease(db, case_id)
-        return detection_result
+        await ModelService.detect_disease(db, case_id)
+        result = read_detection_results_with_image(case_id=case_id, db=db, current_user=current_user)
+        return result
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

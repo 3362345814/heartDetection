@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 # 共享属性
 class DetectionImageBase(BaseModel):
     """检测图像基础数据模型"""
-    image_type: int = Field(..., ge=0, le=3, description="图像类型：0=分割图，1=热力图，2=血流图，3=其他")
+    image_type: int = Field(..., description="图像类型：0=分割图，1=热力图，2=血流图，3=其他")
     file_path: str = Field(..., min_length=1, max_length=500, description="图像文件路径")
 
 
@@ -20,7 +20,7 @@ class DetectionImageCreate(DetectionImageBase):
 # 通过API更新时接收的属性
 class DetectionImageUpdate(DetectionImageBase):
     """更新检测图像时的数据模型"""
-    image_type: Optional[int] = Field(None, ge=0, le=3, description="图像类型：0=分割图，1=热力图，2=血流图，3=其他")
+    image_type: Optional[int] = Field(None, description="图像类型：0=分割图，1=热力图，2=血流图，3=其他")
     file_path: Optional[str] = Field(None, min_length=1, max_length=500, description="图像文件路径")
 
 
