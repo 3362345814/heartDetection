@@ -40,7 +40,9 @@ class UltrasoundImage(Base):
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True, comment="图片ID")
     case_id = Column(Integer, ForeignKey("case.id", ondelete="CASCADE"), nullable=False, comment="外键，关联 case.id")
-    image_type = Column(Integer, nullable=False, comment="图片类型：0=二维-心尖，1=二维-长轴，2=多普勒-心尖，3=多普勒-长轴")
+    image_type = Column(Integer, nullable=False,
+                        comment="图片类型：0=二维-心尖，1=二维-长轴，2=多普勒-心尖，3=多普勒-长轴，4=二维心房尺寸图，"
+                                "5=左心室M型超声图，6=右心室M型超声图，7=左心室组织多普勒图，8=右心室组织多普勒图，7=频谱图")
     file_path = Column(String(500), nullable=False, comment="存储路径（本地或云地址）")
     upload_time = Column(DateTime, default=datetime.utcnow, comment="上传时间，自动填写")
 
@@ -67,8 +69,8 @@ class DetectionImage(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True, comment="附属图片ID")
     result_id = Column(Integer, ForeignKey("detection_result.id", ondelete="CASCADE"), nullable=False,
                        comment="外键，关联 detection_result.id")
-    image_type = Column(Integer, nullable=False, comment="图片类型：0=分割图，1=热力图，2=血流图，3=其他")
-    file_path = Column(String(500), nullable=False, comment="图片路径（本地或云地址）")
+    image_type = Column(Integer, nullable=False, comment="图片类型：0=长轴分割图，1=心尖四腔心分割图，3=反流检测图")
+    file_path = Column(String(500), nullable=False, comment="图片路径（本地地址）")
     created_at = Column(DateTime, default=datetime.utcnow, comment="图片生成时间，自动填写")
 
     detection_result = relationship("DetectionResult", back_populates="detection_images")

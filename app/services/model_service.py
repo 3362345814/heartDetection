@@ -54,6 +54,8 @@ class ModelService:
         db.commit()
         db.refresh(detection_result)
 
+        cls.segment_and_save_masks(db, case_id, detection_result.id)
+
         return detection_result
 
     class_names = ['mild', 'moderate']
@@ -68,10 +70,10 @@ class ModelService:
     @staticmethod
     def _map_image_type_to_model_key(image_type: int) -> str:
         type_map = {
-            0: '2d_apical',
-            1: '2d_long_axis',
-            2: 'doppler_apical',
-            3: 'doppler_long_axis',
+            1: '2d_apical',
+            2: '2d_long_axis',
+            3: 'doppler_apical',
+            4: 'doppler_long_axis'
         }
         return type_map.get(image_type, None)
 
@@ -126,3 +128,86 @@ class ModelService:
         avg_confidence = sum(final_confidences) / len(final_confidences) if final_confidences else 0.0
 
         return final_conclusion, avg_confidence
+
+    @classmethod
+    def segment_and_save_masks(cls, db: Session, case_id: int, detection_result_id: int) -> None:
+        from app.models.models import DetectionImage
+        from matplotlib import pyplot as plt
+        import numpy as np
+        import segmentation_models_pytorch as smp
+        from torchvision import transforms
+        import torch
+        from PIL import Image
+        import os
+        from datetime import datetime
+
+        def overlay_mask(image: Image.Image, mask: np.ndarray, class_names: list[str]) -> np.ndarray:
+            image = image.resize((512, 512))
+            base = np.array(image).copy()
+            color_map = [
+                (0, 0, 0), (255, 0, 0), (0, 255, 0), (0, 0, 255),
+                (255, 255, 0), (255, 0, 255), (0, 255, 255),
+            ]
+            overlay = np.zeros_like(base)
+            for idx in range(1, len(class_names) + 1):
+                overlay[mask == idx] = color_map[idx % len(color_map)]
+            blended = (0.6 * base + 0.4 * overlay).astype(np.uint8)
+            return blended
+
+        image_records = db.query(UltrasoundImage).filter(UltrasoundImage.case_id == case_id).all()
+        model_configs = {
+            1: {
+                "path": "models/2d_apical_unetpp.pth",
+                "class_names": ['LA', 'LV', 'RA', 'RV', 'MV', 'TV']
+            },
+            2: {
+                "path": "models/2d_long_axis_unetpp.pth",
+                "class_names": ['AV', 'LA', 'LV', 'LVOT', 'MV', 'RV']
+            }
+        }
+
+        for record in image_records:
+            config = model_configs.get(record.image_type)
+            if not config:
+                continue
+
+            class_names = config["class_names"]
+            class_count = len(class_names) + 1
+            model = smp.UnetPlusPlus(encoder_name="resnet34", encoder_weights=None, in_channels=3, classes=class_count)
+            device = cls.device
+            model.load_state_dict(torch.load(config["path"], map_location=device))
+            model = model.to(device).eval()
+
+            transform = transforms.Compose([
+                transforms.Resize((512, 512)),
+                transforms.ToTensor()
+            ])
+            image = Image.open(record.file_path).convert("RGB")
+            tensor = transform(image).unsqueeze(0).to(device)
+            with torch.no_grad():
+                output = model(tensor)[0]
+            pred_mask = output.argmax(0).byte().cpu().numpy()
+            overlay = overlay_mask(image, pred_mask, class_names)
+
+            # save path
+            base_dir = f"uploads/case_{case_id}/result_{detection_result_id}"
+            os.makedirs(base_dir, exist_ok=True)
+            save_path = os.path.join(base_dir, f"seg_{record.image_type}.png")
+
+            plt.figure(figsize=(8, 8))
+            plt.imshow(overlay)
+            handles = [plt.Rectangle((0, 0), 1, 1, color=np.array(c) / 255) for c in
+                       [(255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 255, 0), (255, 0, 255), (0, 255, 255)]]
+            plt.legend(handles, class_names)
+            plt.axis("off")
+            plt.tight_layout()
+            plt.savefig(save_path)
+            plt.close()
+
+            db.add(DetectionImage(
+                result_id=detection_result_id,
+                image_type=record.image_type,
+                file_path=save_path,
+                created_at=datetime.utcnow()
+            ))
+        db.commit()
