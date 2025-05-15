@@ -27,6 +27,7 @@ class Case(Base):
     name = Column(String(50), nullable=False, comment="患者姓名")
     gender = Column(Integer, nullable=False, comment="患者性别：0=女，1=男")
     age = Column(Integer, nullable=False, comment="患者年龄")
+    notes = Column(Text, nullable=True, comment="病例备注，可空")
     created_at = Column(DateTime, default=datetime.utcnow, comment="上传时间，自动填写")
 
     # Relationships

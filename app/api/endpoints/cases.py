@@ -25,6 +25,7 @@ def create_case(
         name=case_in.name,
         gender=case_in.gender,
         age=case_in.age,
+        notes=case_in.notes,
     )
     db.add(case)
     db.commit()

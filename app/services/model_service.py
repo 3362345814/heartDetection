@@ -42,15 +42,21 @@ class ModelService:
 
         conclusion, confidence = cls._predict_case(images)
 
-        detection_result = DetectionResult(
-            case_id=case_id,
-            conclusion=conclusion,
-            description="",
-            confidence=confidence,
-            result_time=datetime.utcnow()
-        )
-
-        db.add(detection_result)
+        detection_result = db.query(DetectionResult).filter_by(case_id=case_id).first()
+        if detection_result:
+            detection_result.conclusion = conclusion
+            detection_result.description = ""
+            detection_result.confidence = confidence
+            detection_result.result_time = datetime.utcnow()
+        else:
+            detection_result = DetectionResult(
+                case_id=case_id,
+                conclusion=conclusion,
+                description="",
+                confidence=confidence,
+                result_time=datetime.utcnow()
+            )
+            db.add(detection_result)
         db.commit()
         db.refresh(detection_result)
 
@@ -163,6 +169,10 @@ class ModelService:
             2: {
                 "path": "models/2d_long_axis_unetpp.pth",
                 "class_names": ['AV', 'LA', 'LV', 'LVOT', 'MV', 'RV']
+            },
+            3: {
+                "path": "models/doppler_apical_reflux.pth",
+                "class_names": ['MV', 'TV', 'Aorta']
             }
         }
 
@@ -204,10 +214,16 @@ class ModelService:
             plt.savefig(save_path)
             plt.close()
 
-            db.add(DetectionImage(
-                result_id=detection_result_id,
-                image_type=record.image_type,
-                file_path=save_path,
-                created_at=datetime.utcnow()
-            ))
+            existing = db.query(DetectionImage).filter_by(result_id=detection_result_id,
+                                                          image_type=record.image_type).first()
+            if existing:
+                existing.file_path = save_path
+                existing.created_at = datetime.utcnow()
+            else:
+                db.add(DetectionImage(
+                    result_id=detection_result_id,
+                    image_type=record.image_type,
+                    file_path=save_path,
+                    created_at=datetime.utcnow()
+                ))
         db.commit()
