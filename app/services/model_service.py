@@ -42,6 +42,12 @@ class ModelService:
 
         conclusion, confidence = cls._predict_case(images)
 
+        description = ""
+        if conclusion == "mild":
+            description += "二尖瓣反流（轻度）"
+        elif conclusion == "moderate":
+            description += "二尖瓣反流（中度）"
+
         detection_result = db.query(DetectionResult).filter_by(case_id=case_id).first()
         if detection_result:
             detection_result.conclusion = conclusion
@@ -60,7 +66,7 @@ class ModelService:
         db.commit()
         db.refresh(detection_result)
 
-        cls.segment_and_save_masks(db, case_id, detection_result.id)
+        cls.segment_and_save_masks(db, case_id, detection_result.id, description)
 
         return detection_result
 
@@ -136,7 +142,7 @@ class ModelService:
         return final_conclusion, avg_confidence
 
     @classmethod
-    def segment_and_save_masks(cls, db: Session, case_id: int, detection_result_id: int) -> None:
+    def segment_and_save_masks(cls, db: Session, case_id: int, detection_result_id: int, description: str) -> None:
         from app.models.models import DetectionImage
         from matplotlib import pyplot as plt
         import numpy as np
@@ -226,4 +232,25 @@ class ModelService:
                     file_path=save_path,
                     created_at=datetime.utcnow()
                 ))
+
+            if record.image_type == 3:
+                threshold = 100
+
+                # Check for TV reflux
+                if "TV" in class_names:
+                    tv_index = class_names.index("TV") + 1
+                    print((pred_mask == tv_index).sum(), threshold)
+                    if (pred_mask == tv_index).sum() > threshold:
+                        description += "，三尖瓣反流"
+
+                # Check for Aorta reflux
+                if "Aorta" in class_names:
+                    ao_index = class_names.index("Aorta") + 1
+                    if (pred_mask == ao_index).sum() > threshold:
+                        description += "，主动脉瓣反流"
         db.commit()
+
+        detection_result = db.query(DetectionResult).filter_by(id=detection_result_id).first()
+        if detection_result:
+            detection_result.description = description
+            db.commit()

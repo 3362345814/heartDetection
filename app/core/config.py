@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     # JWT设置
     SECRET_KEY: str = "your-secret-key-here"  # 在生产环境中，使用安全的随机密钥
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080
 
     # 文件存储设置
     UPLOAD_DIRECTORY: str = "uploads"
