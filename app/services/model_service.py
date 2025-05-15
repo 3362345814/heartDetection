@@ -179,6 +179,10 @@ class ModelService:
             3: {
                 "path": "models/doppler_apical_reflux.pth",
                 "class_names": ['MV', 'TV', 'Aorta']
+            },
+            4: {
+                "path": "models/doppler_long_axis_reflux.pth",
+                "class_names": ['MV', 'Aorta']
             }
         }
 
@@ -233,20 +237,20 @@ class ModelService:
                     created_at=datetime.utcnow()
                 ))
 
-            if record.image_type == 3:
+            if record.image_type == 3 or record.image_type == 4:
                 threshold = 100
 
                 # Check for TV reflux
                 if "TV" in class_names:
                     tv_index = class_names.index("TV") + 1
                     print((pred_mask == tv_index).sum(), threshold)
-                    if (pred_mask == tv_index).sum() > threshold:
+                    if (pred_mask == tv_index).sum() > threshold and "三尖瓣反流" not in description:
                         description += "，三尖瓣反流"
 
                 # Check for Aorta reflux
                 if "Aorta" in class_names:
                     ao_index = class_names.index("Aorta") + 1
-                    if (pred_mask == ao_index).sum() > threshold:
+                    if (pred_mask == ao_index).sum() > threshold and "主动脉瓣反流" not in description:
                         description += "，主动脉瓣反流"
         db.commit()
 
