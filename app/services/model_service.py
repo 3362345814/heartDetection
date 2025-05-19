@@ -21,36 +21,25 @@ class ModelService:
 
     @classmethod
     async def detect_disease(cls, db: Session, case_id: int) -> DetectionResult:
-        """
-        为指定病例调用疾病检测模型，生成检测结果
-
-        Args:
-            db: 数据库会话
-            case_id: 病例ID
-
-        Returns:
-            DetectionResult: 创建的检测结果对象
-
-        Raises:
-            ValueError: 如果病例不存在或病例没有关联的超声图像
-        """
-        # 获取病例信息
         case = db.query(Case).filter(Case.id == case_id).first()
         if not case:
             raise ValueError(f"病例不存在: ID {case_id}")
 
-        # 获取病例关联的超声图像
         images = db.query(UltrasoundImage).filter(UltrasoundImage.case_id == case_id).all()
         if not images:
             raise ValueError(f"病例 ID {case_id} 没有关联的超声图像")
 
-        conclusion, confidence = cls._predict_case(images)
+        # 第一步：获取每张图的推理输出
+        prediction_outputs = cls._predict_case(images)
 
+        # 第二步：得出结论和置信度
+        conclusion, confidence = cls._finalize_conclusion(prediction_outputs)
         if conclusion == "mild":
             conclusion = "二尖瓣反流（轻度）"
         elif conclusion == "moderate":
             conclusion = "二尖瓣反流（中度）"
 
+        # 第三步：插入或更新检测结果
         detection_result = db.query(DetectionResult).filter_by(case_id=case_id).first()
         if detection_result:
             detection_result.conclusion = conclusion
@@ -69,6 +58,20 @@ class ModelService:
         db.commit()
         db.refresh(detection_result)
 
+        # 第四步：生成 GradCAM++ 并保存
+        for output in prediction_outputs:
+            cls.generate_gradcam_and_save(
+                model=output["model"],
+                input_tensor=output["input_tensor"],
+                pred_class=output["pred_class"],
+                image=output["image"],
+                image_type=output["image_type"] + 4,
+                case_id=case_id,
+                detection_result_id=detection_result.id,
+                db=db
+            )
+
+        # 第五步：分割 & 报告文本生成
         cls.segment_and_save_masks(db, case_id, detection_result.id, conclusion)
 
         image_map = {img.image_type: img.file_path for img in images if img.image_type in [5, 6, 7, 8, 9, 10]}
@@ -99,7 +102,7 @@ class ModelService:
         return type_map.get(image_type, None)
 
     @classmethod
-    def _predict_case(cls, images) -> tuple[str, float]:
+    def _predict_case(cls, images) -> list[dict]:
         model_files = {
             '2d_apical': 'models/2d_apical.pth',
             '2d_long_axis': 'models/2d_long_axis.pth',
@@ -107,16 +110,15 @@ class ModelService:
             'doppler_long_axis': 'models/doppler_long_axis.pth'
         }
 
-        predictions = []
-        confidence_scores = []
+        results = []
 
         for image in images:
-            image_type = cls._map_image_type_to_model_key(image.image_type)
-            if image_type not in model_files:
+            image_type_key = cls._map_image_type_to_model_key(image.image_type)
+            if image_type_key not in model_files:
                 print(f"警告：未找到与图像类型 {image.image_type} 对应的模型文件")
                 continue
 
-            model_path = model_files[image_type]
+            model_path = model_files[image_type_key]
             if not os.path.exists(model_path):
                 print(f"警告：模型文件不存在: {model_path}")
                 continue
@@ -130,26 +132,88 @@ class ModelService:
             img_response = requests.get(image.file_path)
             img = Image.open(BytesIO(img_response.content)).convert('RGB')
             input_tensor = cls.transform(img).unsqueeze(0).to(cls.device)
+
             with torch.no_grad():
                 output = model(input_tensor)
                 probs = F.softmax(output, dim=1)
                 prob_values = probs.squeeze().tolist()
                 _, pred = torch.max(output, 1)
-                pred_label = cls.class_names[pred.item()]
-                predictions.append(pred_label)
-                confidence_scores.append((pred_label, prob_values[pred.item()]))
 
-        if not predictions:
+            results.append({
+                "model": model,
+                "input_tensor": input_tensor,
+                "pred_class": pred.item(),
+                "image": img.copy(),
+                "image_type": image.image_type,
+                "pred_label": cls.class_names[pred.item()],
+                "prob": prob_values[pred.item()]
+            })
+
+        if not results:
             raise ValueError("没有可用于推理的图像")
+
+        return results
+
+    @classmethod
+    def _finalize_conclusion(cls, outputs: list[dict]) -> tuple[str, float]:
+        predictions = [o["pred_label"] for o in outputs]
+        confidence_scores = [(o["pred_label"], o["prob"]) for o in outputs]
 
         mild_count = predictions.count('mild')
         final_conclusion = 'mild' if mild_count > len(predictions) / 2 else 'moderate'
 
-        # 计算平均置信度
         final_confidences = [score for label, score in confidence_scores if label == final_conclusion]
         avg_confidence = sum(final_confidences) / len(final_confidences) if final_confidences else 0.0
 
         return final_conclusion, avg_confidence
+
+    @classmethod
+    def generate_gradcam_and_save(cls, model, input_tensor, pred_class: int, image: Image.Image,
+                                  image_type: int, case_id: int, detection_result_id: int, db: Session):
+        from torchcam.methods import GradCAMpp
+        import numpy as np
+
+        # 创建 Grad-CAM++ 提取器
+        cam_extractor = GradCAMpp(model, target_layer="layer3")
+        output = model(input_tensor)  # 得到模型输出 logits
+        activation_map = cam_extractor(pred_class, scores=output)[0].cpu().numpy()
+        if activation_map.ndim == 3:
+            activation_map = activation_map.squeeze(0)
+        activation_map = (activation_map - activation_map.min()) / (activation_map.max() - activation_map.min())
+
+        # 着色
+        import matplotlib
+        colormap = matplotlib.colormaps['jet']
+        colored_map = colormap(activation_map)[:, :, :3]
+        colored_map = (colored_map * 255).astype(np.uint8)
+        colored_map = Image.fromarray(colored_map).resize(image.size)
+
+        # 融合热力图
+        heatmap = Image.blend(image, colored_map, alpha=0.5)
+
+        # 保存为 buffer
+        buf = BytesIO()
+        heatmap.save(buf, format='PNG')
+        buf.seek(0)
+
+        # 上传到 COS
+        save_path = upload_file_to_cos(buf, f"gradcam_{image_type}.png", content_type="image/png",
+                                       path_prefix=f"gradcam/case_{case_id}/result_{detection_result_id}")
+
+        # 保存到数据库
+        from app.models.models import DetectionImage
+        existing = db.query(DetectionImage).filter_by(result_id=detection_result_id, image_type=image_type).first()
+        if existing:
+            existing.file_path = save_path
+            existing.created_at = datetime.utcnow()
+        else:
+            db.add(DetectionImage(
+                result_id=detection_result_id,
+                image_type=image_type,
+                file_path=save_path,
+                created_at=datetime.utcnow()
+            ))
+        db.commit()
 
     @classmethod
     def segment_and_save_masks(cls, db: Session, case_id: int, detection_result_id: int, conclusion: str) -> None:

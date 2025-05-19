@@ -40,7 +40,6 @@ async def upload_ultrasound_image(
 
     # Create upload directory if it doesn't exist
     upload_dir = os.path.join(settings.UPLOAD_DIRECTORY, f"case_{case_id}")
-    os.makedirs(upload_dir, exist_ok=True)
 
     # Find existing image or create new placeholder
     existing_image = db.query(UltrasoundImage).filter_by(case_id=case_id, image_type=image_type).first()
