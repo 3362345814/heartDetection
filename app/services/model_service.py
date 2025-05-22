@@ -160,7 +160,7 @@ class ModelService:
         confidence_scores = [(o["pred_label"], o["prob"]) for o in outputs]
 
         mild_count = predictions.count('mild')
-        final_conclusion = 'mild' if mild_count > len(predictions) / 2 else 'moderate'
+        final_conclusion = 'mild' if mild_count >= len(predictions) / 2 else 'moderate'
 
         final_confidences = [score for label, score in confidence_scores if label == final_conclusion]
         avg_confidence = sum(final_confidences) / len(final_confidences) if final_confidences else 0.0
