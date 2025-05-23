@@ -1,11 +1,9 @@
-import os
 from typing import Any, List
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
-from app.core.config import settings
 from app.models.models import Case, UltrasoundImage, User
 from app.schemas.ultrasound_image import UltrasoundImage as UltrasoundImageSchema
 from app.utils.cos import upload_file_to_cos, delete_file_from_cos
@@ -39,7 +37,7 @@ async def upload_ultrasound_image(
         )
 
     # Create upload directory if it doesn't exist
-    upload_dir = os.path.join(settings.UPLOAD_DIRECTORY, f"case_{case_id}")
+    upload_dir = f"uploads/case_{case_id}"
 
     # Find existing image or create new placeholder
     existing_image = db.query(UltrasoundImage).filter_by(case_id=case_id, image_type=image_type).first()

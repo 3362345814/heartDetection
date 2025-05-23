@@ -37,9 +37,6 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080
 
-    # 文件存储设置
-    UPLOAD_DIRECTORY: str = "uploads"
-
     class Config:
         case_sensitive = True
         env_file = "../../.env"
