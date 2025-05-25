@@ -76,8 +76,9 @@ class ModelService:
 
         image_map = {img.image_type: img.file_path for img in images if img.image_type in [5, 6, 7, 8, 9, 10]}
         if image_map:
-            report_text = UltrasoundReport.report(image_map)
-            detection_result.description = report_text
+            report_map = UltrasoundReport.report(image_map)
+            detection_result.description = report_map["description"]
+            detection_result.conclusion = report_map["conclusion"] + "，" + detection_result.conclusion
             db.commit()
 
         return detection_result
@@ -247,7 +248,7 @@ class ModelService:
             },
             2: {
                 "path": "models/2d_long_axis_unetpp.pth",
-                "class_names": ['AV', 'LA', 'LV', 'LVOT', 'MV', 'RV']
+                "class_names": ['LA', 'LV', 'RV', 'AV', 'MV', 'LVOT']
             },
             3: {
                 "path": "models/doppler_apical_reflux.pth",

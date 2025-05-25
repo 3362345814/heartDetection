@@ -16,7 +16,7 @@ client = CosS3Client(config)
 
 
 def upload_file_to_cos(file_stream, filename: str, content_type: str = "image/jpeg", path_prefix: str = None) -> str:
-    key = f"{path_prefix}/{uuid.uuid4().hex}_{filename}"
+    key = f"{path_prefix}/{uuid.uuid4().hex}.{filename.split('.')[-1]}"
     response = client.put_object(
         Bucket=settings.COS_BUCKET_NAME,
         Body=file_stream,

@@ -400,7 +400,7 @@ class UltrasoundReport:
                 measurements.get('RA_length') > normal_ranges['RA_length'][1]:
             results.append("右房扩大")
 
-        return f"{', '.join(results)}，余房室腔大小正常。" if results else "各房室腔大小正常。"
+        return "1." + f"{', '.join(results)}，余房室腔大小正常。" if results else "各房室腔大小正常。"
 
     def _format_tapse(self, value: float) -> float:
         """格式化TAPSE值，进行四舍五入"""
@@ -417,15 +417,14 @@ class UltrasoundReport:
                     return image_data['measurements'][param]
         return None
 
-    def generate_report(self) -> str:
+    def generate_report(self) -> dict:
+        res_map = {
+            "description": "",
+            "conclusion": "",
+            "data": {}
+        }
         """生成超声报告"""
         report_lines = []
-
-        # 添加报告头部信息
-        report_lines.extend([
-            "超声心动图报告",
-            "=" * 40,
-        ])
 
         # 1. M型+二维+彩色多普勒部分
         chamber_data = None
@@ -455,8 +454,11 @@ class UltrasoundReport:
 
         # 获取所有需要的测量值
         ea = self._get_measurement_value('E/A')
+        res_map["data"]["E/A"] = ea
         edt = self._get_measurement_value('EDT')
+        res_map["data"]["EDT"] = edt
         ee = self._get_measurement_value('E_Med_E')
+        res_map["data"]["E_Med_E"] = ee
 
         # 按照指定格式组合测量值
         if ea is not None:
@@ -473,7 +475,9 @@ class UltrasoundReport:
         # 5. 左心室收缩功能测定
         report_lines.append("5. 左心室收缩功能测定:")
         edv = self._get_measurement_value('EDV')
+        res_map["data"]["EDV"] = edv
         lvef = self._get_measurement_value('LVEF')
+        res_map["data"]["LVEF"] = lvef
         if edv is not None:
             report_lines.append(f"EDV {edv}ml")
         if lvef is not None:
@@ -482,6 +486,7 @@ class UltrasoundReport:
         # 6. 右心室功能测定
         report_lines.append("6. 右心室功能测定:")
         tapse_value = self._get_tapse_value()  # 获取原始值
+        res_map["data"]["TAPSE"] = tapse_value
         if tapse_value is not None:
             formatted_tapse = self._format_tapse(tapse_value)  # 只在这里进行一次四舍五入
             report_lines.append(f"TAPSE {formatted_tapse}cm（正常值：＞1.6cm）")
@@ -495,11 +500,7 @@ class UltrasoundReport:
         else:
             report_lines.append("无法计算（缺少必要数据）")
 
-        # 诊断总结
-        report_lines.extend([
-            "诊断总结:",
-            "=" * 40
-        ])
+        res_map["description"] = "\n".join(report_lines)
 
         diagnoses = []
 
@@ -510,14 +511,15 @@ class UltrasoundReport:
             diagnoses.append("左室舒张功能减低")
 
         if diagnoses:
-            report_lines.append("\n".join(diagnoses))
+            res_map["conclusion"] = "\n".join(diagnoses)
         else:
-            report_lines.append("未见明显异常")
+            res_map["conclusion"] = "未见明显异常"
 
-        return "\n".join(report_lines)
+        return res_map
 
     @staticmethod
     def report(image_map: Dict[int, str]):
         report_generator = UltrasoundReport(image_map)
         report_generator.process_images()
-        return report_generator.generate_report()
+        res_map = report_generator.generate_report()
+        return res_map
