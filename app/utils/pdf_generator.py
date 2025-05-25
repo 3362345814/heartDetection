@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from reportlab.lib.enums import TA_CENTER
@@ -37,6 +38,12 @@ def generate_pdf_report(case):
     styles.add(
         ParagraphStyle(name='SectionTitle', parent=styles['Chinese'], fontSize=16, spaceBefore=12, spaceAfter=12))
 
+    def load_image(path):
+        try:
+            return RLImage(path, width=90, height=67)
+        except Exception:
+            return Paragraph("(图像加载失败)", styles["Chinese"])
+
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4)
     content = []
@@ -54,12 +61,11 @@ def generate_pdf_report(case):
     content.append(Paragraph("超声图像列表：", styles["Chinese"]))
     # 超声图像表格
     image_cells = []
-    for img in case.ultrasound_images:
-        label = ultrasound_types.get(img.image_type, f"类型{img.image_type}")
-        try:
-            image = RLImage(img.file_path, width=90, height=67)
-        except Exception:
-            image = Paragraph("(图像加载失败)", styles["Chinese"])
+    image_paths = [(img.file_path, ultrasound_types.get(img.image_type, f"类型{img.image_type}")) for img in
+                   case.ultrasound_images]
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        images = list(executor.map(lambda p: (load_image(p[0]), p[1]), image_paths))
+    for image, label in images:
         cell = Table(
             [
                 [image],
@@ -113,13 +119,11 @@ def generate_pdf_report(case):
 
         content.append(Paragraph("诊断图片：", styles["Chinese"]))
         detection_cells = []
-        for dimg in result.detection_images:
-            label = detection_image_types.get(dimg.image_type, f"类型{dimg.image_type}")
-            try:
-                image = RLImage(dimg.file_path, width=90, height=67)
-            except Exception as e:
-                print(e)
-                image = Paragraph("(图像加载失败)", styles["Chinese"])
+        image_paths = [(dimg.file_path, detection_image_types.get(dimg.image_type, f"类型{dimg.image_type}")) for dimg
+                       in result.detection_images]
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            images = list(executor.map(lambda p: (load_image(p[0]), p[1]), image_paths))
+        for image, label in images:
             cell = Table(
                 [
                     [image],
