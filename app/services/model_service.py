@@ -78,7 +78,8 @@ class ModelService:
         if image_map:
             report_map = UltrasoundReport.report(image_map)
             detection_result.description = report_map["description"]
-            detection_result.conclusion = report_map["conclusion"] + "，" + detection_result.conclusion
+            if report_map["conclusion"] != "":
+                detection_result.conclusion = report_map["conclusion"] + "，" + detection_result.conclusion
             db.commit()
 
         return detection_result
@@ -116,12 +117,10 @@ class ModelService:
         for image in images:
             image_type_key = cls._map_image_type_to_model_key(image.image_type)
             if image_type_key not in model_files:
-                print(f"警告：未找到与图像类型 {image.image_type} 对应的模型文件")
                 continue
 
             model_path = model_files[image_type_key]
             if not os.path.exists(model_path):
-                print(f"警告：模型文件不存在: {model_path}")
                 continue
 
             model = models.resnet50(pretrained=False)

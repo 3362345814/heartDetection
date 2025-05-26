@@ -1,5 +1,4 @@
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
 
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
@@ -52,13 +51,15 @@ def generate_pdf_report(case):
         return "男" if g == 1 else "女"
 
     content.append(Paragraph("心脏超声检测报告", styles["MyTitle"]))
-    content.append(Paragraph(f"患者姓名: {case.name}", styles["Chinese"]))
-    content.append(Paragraph(f"性别: {gender_to_str(case.gender)}", styles["Chinese"]))
-    content.append(Paragraph(f"年龄: {case.age}", styles["Chinese"]))
-    content.append(Paragraph(f"备注: {case.notes or '无'}", styles["Chinese"]))
+    content.append(Paragraph("基本信息：", styles["SectionTitle"]))
+    content.append(Paragraph(f"患者姓名：{case.name}", styles["Chinese"]))
+    content.append(Paragraph(f"性别：{gender_to_str(case.gender)}", styles["Chinese"]))
+    content.append(Paragraph(f"年龄：{case.age}", styles["Chinese"]))
+    content.append(Paragraph(f"备注：{case.notes or '无'}", styles["Chinese"]))
+    content.append(Paragraph(f"就诊时间：{case.created_at.strftime('%Y-%m-%d %H:%M:%S')}", styles["Chinese"]))
     content.append(Spacer(1, 12))
 
-    content.append(Paragraph("超声图像列表：", styles["Chinese"]))
+    content.append(Paragraph("超声图像列表：", styles["SectionTitle"]))
     # 超声图像表格
     image_cells = []
     image_paths = [(img.file_path, ultrasound_types.get(img.image_type, f"类型{img.image_type}")) for img in
@@ -106,18 +107,19 @@ def generate_pdf_report(case):
         content.append(Spacer(1, 12))
 
     for result in case.detection_results:
-        content.append(Paragraph("诊断结果：", styles["SectionTitle"]))
         conclusion_text = result.conclusion.replace('\n', '<br/>')
         description_text = result.description.replace('\n', '<br/>')
         content.append(Spacer(1, 6))
-        content.append(Paragraph(f"结论:<br/>{conclusion_text}", styles["Chinese"]))
+        content.append(Paragraph("结论：", styles["SectionTitle"]))
+        content.append(Paragraph(f"<br/>{conclusion_text}", styles["Chinese"]))
         content.append(Spacer(1, 6))
-        content.append(Paragraph(f"描述:<br/>{description_text}", styles["Chinese"]))
+        content.append(Paragraph("描述：", styles["SectionTitle"]))
+        content.append(Paragraph(f"<br/>{description_text}", styles["Chinese"]))
         content.append(Spacer(1, 12))
-        content.append(Paragraph(f"模型置信度: {result.confidence:.2f}", styles["Chinese"]))
-        content.append(Paragraph(f"完成时间: {result.result_time}", styles["Chinese"]))
+        content.append(Paragraph(f"模型置信度：{result.confidence:.2f}", styles["Chinese"]))
+        content.append(Paragraph(f"完成时间：{result.result_time}", styles["Chinese"]))
 
-        content.append(Paragraph("诊断图片：", styles["Chinese"]))
+        content.append(Paragraph("诊断图片：", styles["SectionTitle"]))
         detection_cells = []
         image_paths = [(dimg.file_path, detection_image_types.get(dimg.image_type, f"类型{dimg.image_type}")) for dimg
                        in result.detection_images]
@@ -168,7 +170,8 @@ def generate_pdf_report(case):
 
     # 上传报告到 COS
     buffer.seek(0)
-    filename = f"report_{case.id}_{int(datetime.utcnow().timestamp())}.pdf"
+
+    filename = f"report_{case.id}.pdf"
     cos_url = upload_file_to_cos(buffer, filename, content_type="application/pdf", path_prefix="reports")
 
     return cos_url

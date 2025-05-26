@@ -400,7 +400,7 @@ class UltrasoundReport:
                 measurements.get('RA_length') > normal_ranges['RA_length'][1]:
             results.append("右房扩大")
 
-        return "1." + f"{', '.join(results)}，余房室腔大小正常。" if results else "各房室腔大小正常。"
+        return "1. " + f"{'，'.join(results)}，余房室腔大小正常。" if results else "各房室腔大小正常。"
 
     def _format_tapse(self, value: float) -> float:
         """格式化TAPSE值，进行四舍五入"""
@@ -436,20 +436,20 @@ class UltrasoundReport:
         if chamber_data:
             report_lines.append(self._evaluate_chamber_size(chamber_data))
         else:
-            report_lines.append("1.各房室腔大小正常。")
+            report_lines.append("1. 各房室腔大小正常。")
 
         # 2. 彩色室壁动力学分析
-        report_lines.append("2. 彩色室壁动力学分析:")
+        report_lines.append("\n2. 彩色室壁动力学分析：")
         report_lines.append("左室壁节段性运动未见异常。")
 
         # 3. 组织多普勒
-        report_lines.append("3. 组织多普勒:")
+        report_lines.append("\n3. 组织多普勒：")
         e_velocity = self._get_measurement_value('e_velocity')
         if e_velocity is not None:
             report_lines.append(f"二尖瓣环室间隔位点e' {e_velocity}cm/s")
 
         # 4. 左心室舒张功能测定
-        report_lines.append("4. 左心室舒张功能测定:")
+        report_lines.append("\n4. 左心室舒张功能测定：")
         measurements = []
 
         # 获取所有需要的测量值
@@ -473,18 +473,22 @@ class UltrasoundReport:
             report_lines.append("，".join(measurements))
 
         # 5. 左心室收缩功能测定
-        report_lines.append("5. 左心室收缩功能测定:")
+        report_lines.append("\n5. 左心室收缩功能测定：")
         edv = self._get_measurement_value('EDV')
         res_map["data"]["EDV"] = edv
         lvef = self._get_measurement_value('LVEF')
         res_map["data"]["LVEF"] = lvef
+        measurements = []
         if edv is not None:
-            report_lines.append(f"EDV {edv}ml")
+            measurements.append(f"EDV {edv}ml")
         if lvef is not None:
-            report_lines.append(f"LVEF {lvef}%（正常值：55%-75%）")
+            measurements.append(f"LVEF {lvef}%（正常值：55%-75%）")
+
+        if measurements:
+            report_lines.append("，".join(measurements))
 
         # 6. 右心室功能测定
-        report_lines.append("6. 右心室功能测定:")
+        report_lines.append("\n6. 右心室功能测定：")
         tapse_value = self._get_tapse_value()  # 获取原始值
         res_map["data"]["TAPSE"] = tapse_value
         if tapse_value is not None:
@@ -492,7 +496,7 @@ class UltrasoundReport:
             report_lines.append(f"TAPSE {formatted_tapse}cm（正常值：＞1.6cm）")
 
         # 7. 估测肺动脉收缩压
-        report_lines.append("7. 估测肺动脉收缩压:")
+        report_lines.append("\n7. 估测肺动脉收缩压：")
         tr_velocity = self._get_measurement_value('tr_velocity')
         if tr_velocity is not None:
             pressure = self._calculate_pulmonary_pressure(tr_velocity)
@@ -500,7 +504,7 @@ class UltrasoundReport:
         else:
             report_lines.append("无法计算（缺少必要数据）")
 
-        res_map["description"] = "\n".join(report_lines)
+        res_map["description"] = "".join(report_lines)
 
         diagnoses = []
 
@@ -511,9 +515,9 @@ class UltrasoundReport:
             diagnoses.append("左室舒张功能减低")
 
         if diagnoses:
-            res_map["conclusion"] = "\n".join(diagnoses)
+            res_map["conclusion"] = "，".join(diagnoses)
         else:
-            res_map["conclusion"] = "未见明显异常"
+            res_map["conclusion"] = ""
 
         return res_map
 
