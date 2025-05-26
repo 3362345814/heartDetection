@@ -9,7 +9,7 @@ class CaseBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=50)
     gender: int = Field(..., ge=0, le=1)  # 0=女性, 1=男性
     age: int = Field(..., ge=0, le=150)
-    notes: Optional[str] = Field(None, min_length=1, max_length=1000)
+    notes: Optional[str] = Field(None, max_length=1000)
 
 
 # 通过API创建时接收的属性
@@ -22,7 +22,7 @@ class CaseUpdate(CaseBase):
     name: Optional[str] = Field(None, min_length=1, max_length=50)
     gender: Optional[int] = Field(None, ge=0, le=1)
     age: Optional[int] = Field(None, ge=0, le=150)
-    notes: Optional[str] = Field(None, min_length=1, max_length=1000)
+    notes: Optional[str] = Field(None, max_length=1000)
 
 
 # 存储在数据库中的模型共享的属性

@@ -116,7 +116,7 @@ def generate_pdf_report(case):
         content.append(Paragraph("描述：", styles["SectionTitle"]))
         content.append(Paragraph(f"<br/>{description_text}", styles["Chinese"]))
         content.append(Spacer(1, 12))
-        content.append(Paragraph(f"模型置信度：{result.confidence:.2f}", styles["Chinese"]))
+        content.append(Paragraph(f"模型置信度：{result.confidence * 100:.2f}%", styles["Chinese"]))
         content.append(Paragraph(f"完成时间：{result.result_time}", styles["Chinese"]))
 
         content.append(Paragraph("诊断图片：", styles["SectionTitle"]))

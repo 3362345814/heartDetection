@@ -227,8 +227,9 @@ class ModelService:
         from datetime import datetime
 
         def overlay_mask(image: Image.Image, mask: np.ndarray, class_names: list[str]) -> np.ndarray:
-            image = image.resize((512, 512))
-            base = np.array(image).copy()
+            original_size = image.size  # 保存原图大小
+            resized_image = image.resize((512, 512))
+            base = np.array(resized_image).copy()
             color_map = [
                 (0, 0, 0), (255, 0, 0), (0, 255, 0), (0, 0, 255),
                 (255, 255, 0), (255, 0, 255), (0, 255, 255),
@@ -237,7 +238,12 @@ class ModelService:
             for idx in range(1, len(class_names) + 1):
                 overlay[mask == idx] = color_map[idx % len(color_map)]
             blended = (0.6 * base + 0.4 * overlay).astype(np.uint8)
-            return blended
+
+            # 将叠加图 resize 回原图尺寸并叠加到原图上
+            blended_image = Image.fromarray(blended).resize(original_size)
+            original_array = np.array(image)
+            final_overlay = (0.3 * original_array + 0.7 * np.array(blended_image)).astype(np.uint8)
+            return final_overlay
 
         image_records = db.query(UltrasoundImage).filter(UltrasoundImage.case_id == case_id).all()
         model_configs = {
